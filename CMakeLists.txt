@@ -5,6 +5,7 @@ set(TORCHSPARSE_VERSION 0.6.18)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 option(WITH_CUDA "Enable CUDA support" OFF)
+option(WITH_SDAA "Enable SDAA (Tecorigin AI Accelerator) support" OFF)
 option(WITH_PYTHON "Link to Python when building" ON)
 option(WITH_METIS "Enable METIS support" OFF)
 
@@ -13,6 +14,21 @@ if(WITH_CUDA)
   add_definitions(-D__CUDA_NO_HALF_OPERATORS__)
   add_definitions(-DWITH_CUDA)
   set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+endif()
+
+if(WITH_SDAA)
+  add_definitions(-DWITH_SDAA)
+  add_definitions(-DUSE_EXPERIMENTAL_SDAA_API)
+  if(DEFINED ENV{SDAA_HOME})
+    include_directories($ENV{SDAA_HOME}/include)
+    link_directories($ENV{SDAA_HOME}/lib64)
+  else()
+    include_directories(/opt/tecoai/include)
+    link_directories(/opt/tecoai/lib64)
+  endif()
+  if(DEFINED TORCH_SDAA_HOME)
+    include_directories(${TORCH_SDAA_HOME}/torch_sdaa/include)
+  endif()
 endif()
 
 if (WITH_PYTHON)
@@ -31,9 +47,16 @@ file(GLOB OPERATOR_SOURCES csrc/*.* csrc/cpu/*.*)
 if(WITH_CUDA)
   file(GLOB OPERATOR_SOURCES ${OPERATOR_SOURCES} csrc/cuda/*.h csrc/cuda/*.cu)
 endif()
+if(WITH_SDAA)
+  file(GLOB SDAA_SOURCES csrc/sdaa/*.h csrc/sdaa/*.scpp)
+  list(APPEND OPERATOR_SOURCES ${SDAA_SOURCES})
+endif()
 
 add_library(${PROJECT_NAME} SHARED ${OPERATOR_SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${TORCH_LIBRARIES})
+if(WITH_SDAA)
+  target_link_libraries(${PROJECT_NAME} PRIVATE sdaart)
+endif()
 if (WITH_PYTHON)
   target_link_libraries(${PROJECT_NAME} PRIVATE Python3::Python)
 endif()
@@ -100,6 +123,14 @@ if(WITH_CUDA)
     csrc/cuda/rw_cuda.h
     csrc/cuda/spmm_cuda.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/cuda)
+endif()
+if(WITH_SDAA)
+  install(FILES
+    csrc/sdaa/convert_sdaa.h
+    csrc/sdaa/diag_sdaa.h
+    csrc/sdaa/rw_sdaa.h
+    csrc/sdaa/spmm_sdaa.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/sdaa)
 endif()
 
 if(WITH_CUDA)

@@ -3,6 +3,7 @@ import os
 import os.path as osp
 import platform
 import sys
+import warnings
 from itertools import product
 
 import torch
@@ -10,10 +11,21 @@ from setuptools import find_packages, setup
 from torch.__config__ import parallel_info
 from torch.utils.cpp_extension import (
     CUDA_HOME,
-    BuildExtension,
+    BuildExtension as CudaBuildExt,
     CppExtension,
     CUDAExtension,
 )
+
+try:
+    import torch_sdaa
+    WITH_SDAA = torch.sdaa.is_available()
+    from torch_sdaa.utils.cpp_extension import (TecoExtension,
+                                                BuildExtension as SdaaBuildExt)
+except ImportError:
+    WITH_SDAA = False
+    torch_sdaa = None
+    TecoExtension = None
+    SdaaBuildExt = None
 
 __version__ = '0.6.18'
 URL = 'https://github.com/rusty1s/pytorch_sparse'
@@ -22,12 +34,29 @@ WITH_CUDA = False
 if torch.cuda.is_available():
     WITH_CUDA = CUDA_HOME is not None or torch.version.hip
 suffices = ['cpu', 'cuda'] if WITH_CUDA else ['cpu']
+if WITH_SDAA:
+    suffices = suffices + ['sdaa']
 if os.getenv('FORCE_CUDA', '0') == '1':
     suffices = ['cuda', 'cpu']
 if os.getenv('FORCE_ONLY_CUDA', '0') == '1':
     suffices = ['cuda']
 if os.getenv('FORCE_ONLY_CPU', '0') == '1':
     suffices = ['cpu']
+if os.getenv('FORCE_SDAA', '0') == '1':
+    WITH_SDAA = True
+    if 'sdaa' not in suffices:
+        suffices = suffices + ['sdaa']
+if os.getenv('FORCE_ONLY_SDAA', '0') == '1':
+    WITH_SDAA = True
+    suffices = ['sdaa']
+
+if WITH_SDAA and WITH_CUDA:
+    warnings.warn(
+        "Both WITH_SDAA and WITH_CUDA are enabled. "
+        "SDAA extensions will use CudaBuildExt which may not handle .scpp files. "
+        "Consider using FORCE_ONLY_SDAA=1 or FORCE_ONLY_CUDA=1.",
+        stacklevel=2,
+    )
 
 BUILD_DOCS = os.getenv('BUILD_DOCS', '0') == '1'
 
@@ -104,6 +133,36 @@ def get_extensions():
                 nvcc_flags += ['--expt-relaxed-constexpr']
             extra_compile_args['nvcc'] = nvcc_flags
 
+        if suffix == 'sdaa':
+            define_macros += [('WITH_SDAA', None),
+                              ('USE_EXPERIMENTAL_SDAA_API', None)]
+            sdaa_flags = os.getenv('SDAA_FLAGS', '')
+            sdaa_flags = [] if sdaa_flags == '' else sdaa_flags.split(' ')
+            sdaa_flags += ['-O3']
+            extra_compile_args['cxx'] += sdaa_flags
+            # Add SDAA include dirs
+            SDAA_HOME = os.getenv('SDAA_HOME', '/opt/tecoai')
+            extra_compile_args['cxx'] += [
+                f'-I{osp.join(SDAA_HOME, "include")}',
+            ]
+            if torch_sdaa is not None:
+                TORCH_SDAA_HOME = osp.dirname(osp.dirname(torch_sdaa.__file__))
+                extra_compile_args['cxx'] += [
+                    f'-I{osp.join(TORCH_SDAA_HOME, "torch_sdaa", "include")}',
+                ]
+            # Convert extra_link_args to dict format for TecoExtension
+            extra_link_args = {
+                'cxx': (extra_link_args if isinstance(extra_link_args, list)
+                        else []) + [
+                    f'-L{osp.join(SDAA_HOME, "lib64")}',
+                    '-lsdaart',
+                ],
+                'tecocc': [
+                    f'-L{osp.join(SDAA_HOME, "lib64")}',
+                    '-lsdaart',
+                ],
+            }
+
         name = main.split(os.sep)[-1][:-4]
         sources = [main]
 
@@ -115,9 +174,18 @@ def get_extensions():
         if suffix == 'cuda' and osp.exists(path):
             sources += [path]
 
+        path = osp.join(extensions_dir, 'sdaa', f'{name}_sdaa.scpp')
+        if suffix == 'sdaa' and osp.exists(path):
+            sources += [path]
+
         phmap_dir = osp.abspath("third_party/parallel-hashmap")
 
-        Extension = CppExtension if suffix == 'cpu' else CUDAExtension
+        if suffix == 'cuda':
+            Extension = CUDAExtension
+        elif suffix == 'sdaa' and TecoExtension is not None:
+            Extension = TecoExtension
+        else:
+            Extension = CppExtension
         extension = Extension(
             f'torch_sparse._{name}_{suffix}',
             sources,
@@ -169,7 +237,9 @@ setup(
     },
     ext_modules=get_extensions() if not BUILD_DOCS else [],
     cmdclass={
-        'build_ext': BuildExtension.with_options(no_python_abi_suffix=True)
+        'build_ext': (SdaaBuildExt if WITH_SDAA and SdaaBuildExt is not None
+                      else CudaBuildExt
+                      ).with_options(no_python_abi_suffix=True)
     },
     packages=find_packages(),
     include_package_data=include_package_data,

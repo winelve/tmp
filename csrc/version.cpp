@@ -11,6 +11,10 @@
 #endif
 #endif
 
+#ifdef WITH_SDAA
+#include <torch_sdaa/sdaa_extension.h>
+#endif
+
 #include "macros.h"
 
 #ifdef _WIN32
@@ -35,7 +39,17 @@ SPARSE_API int64_t cuda_version() noexcept {
   return -1;
 #endif
 }
+
+SPARSE_API int64_t sdaa_version() noexcept {
+#ifdef WITH_SDAA
+  // SDAA runtime version, can be refined when version API is available
+  return 1;
+#else
+  return -1;
+#endif
+}
 } // namespace sparse
 
-static auto registry = torch::RegisterOperators().op(
-    "torch_sparse::cuda_version", [] { return sparse::cuda_version(); });
+static auto registry = torch::RegisterOperators()
+    .op("torch_sparse::cuda_version", [] { return sparse::cuda_version(); })
+    .op("torch_sparse::sdaa_version", [] { return sparse::sdaa_version(); });

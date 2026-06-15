@@ -24,6 +24,8 @@ sample_adj(torch::Tensor rowptr, torch::Tensor col, torch::Tensor idx,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for sample_adj");
   } else {
     return sample_adj_cpu(rowptr, col, idx, num_neighbors, replace);
   }

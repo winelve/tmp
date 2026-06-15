@@ -1,0 +1,85 @@
+// SDAA convert kernel implementation (ind2ptr / ptr2ind).
+// Uses AT_DISPATCH macros for type dispatch.
+
+#include "convert_sdaa.h"
+#include <torch/script.h>
+#include <torch_sdaa/sdaa_extension.h>
+#include <ATen/ATen.h>
+#include <cstdint>
+
+// ─── ind2ptr kernel ───────────────────────────────────────────────────
+// Converts index representation to pointer (CSR rowptr) representation.
+
+__global__ void ind2ptr_kernel(
+    const int64_t *ind, int64_t *out,
+    int64_t M, int64_t numel) {
+  int tid = threadIdx, nt = threadDim;
+
+  // Thread 0 handles the prefix (indices before ind[0])
+  if (tid == 0 && numel > 0) {
+    for (int64_t i = 0; i <= ind[0]; i++)
+      out[i] = 0;
+  }
+
+  // Each thread handles one index transition
+  // Ranges are disjoint: thread i writes to out[ind[i-1]+1..ind[i]]
+  for (int64_t i = tid; i < numel; i += nt) {
+    if (i > 0) {
+      for (int64_t j = ind[i - 1]; j < ind[i]; j++)
+        out[j + 1] = i;
+    }
+  }
+
+  // Thread 0 handles the suffix (indices after ind[numel-1])
+  // Range out[ind[numel-1]+1..M] is disjoint from all other ranges
+  if (tid == 0 && numel > 0) {
+    for (int64_t i = ind[numel - 1] + 1; i < M + 1; i++)
+      out[i] = numel;
+  }
+}
+
+torch::Tensor ind2ptr_sdaa(torch::Tensor ind, int64_t M) {
+  AT_ASSERTM(ind.dim() == 1, "ind must be 1D");
+
+  auto out = torch::empty({M + 1}, ind.options());
+
+  if (ind.numel() == 0)
+    return out.zero_();
+
+  auto ind_data = ind.data_ptr<int64_t>();
+  auto out_data = out.data_ptr<int64_t>();
+
+  ind2ptr_kernel<<<0>>>(ind_data, out_data, M, ind.numel());
+
+  return out;
+}
+
+// ─── ptr2ind kernel ───────────────────────────────────────────────────
+// Converts pointer (CSR rowptr) representation to index representation.
+
+__global__ void ptr2ind_kernel(
+    const int64_t *ptr, int64_t *out,
+    int64_t E, int64_t numel) {
+  int tid = threadIdx, nt = threadDim;
+
+  for (int64_t i = tid; i < numel; i += nt) {
+    int64_t idx = ptr[i];
+    int64_t next_idx = ptr[i + 1];
+    for (int64_t j = idx; j < next_idx; j++) {
+      out[j] = i;
+    }
+  }
+}
+
+torch::Tensor ptr2ind_sdaa(torch::Tensor ptr, int64_t E) {
+  AT_ASSERTM(ptr.dim() == 1, "ptr must be 1D");
+
+  auto out = torch::empty({E}, ptr.options());
+
+  auto ptr_data = ptr.data_ptr<int64_t>();
+  auto out_data = out.data_ptr<int64_t>();
+
+  ptr2ind_kernel<<<0>>>(ptr_data, out_data, E, ptr.numel() - 1);
+
+  return out;
+}

@@ -6,12 +6,13 @@ import torch_scatter
 
 from torch_sparse.matmul import matmul, spspmm
 from torch_sparse.tensor import SparseTensor
-from torch_sparse.testing import devices, grad_dtypes, reductions
+from torch_sparse.testing import devices, grad_dtypes, reductions, skip_if_unsupported
 
 
 @pytest.mark.parametrize('dtype,device,reduce',
                          product(grad_dtypes, devices, reductions))
 def test_spmm(dtype, device, reduce):
+    skip_if_unsupported(dtype, device)
     if device == torch.device('cuda:0') and dtype == torch.bfloat16:
         return  # Not yet implemented.
 

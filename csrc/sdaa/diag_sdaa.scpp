@@ -1,0 +1,67 @@
+// SDAA diag kernel implementation (non_diag_mask).
+// Uses AT_DISPATCH macros for type dispatch.
+
+#include "diag_sdaa.h"
+#include <torch/script.h>
+#include <torch_sdaa/sdaa_extension.h>
+#include <ATen/ATen.h>
+#include <cstdint>
+
+// ─── non_diag_mask kernel ─────────────────────────────────────────────
+// Computes a boolean mask indicating non-diagonal elements in a sparse matrix.
+
+__global__ void non_diag_mask_kernel(
+    const int64_t *row, const int64_t *col, bool *out,
+    int64_t N, int64_t k, int64_t num_diag, int64_t numel) {
+  int tid = threadIdx, nt = threadDim;
+
+  for (int64_t i = tid; i < numel; i += nt) {
+    int64_t r = row[i];
+    int64_t c = col[i];
+
+    if (k < 0) {
+      if (r + k < 0) {
+        out[i] = true;
+      } else if (r + k >= N) {
+        out[i + num_diag] = true;
+      } else if (r + k > c) {
+        out[i + r + k] = true;
+      } else if (r + k < c) {
+        out[i + r + k + 1] = true;
+      }
+    } else {
+      if (r + k >= N) {
+        out[i + num_diag] = true;
+      } else if (r + k > c) {
+        out[i + r] = true;
+      } else if (r + k < c) {
+        out[i + r + 1] = true;
+      }
+    }
+  }
+}
+
+torch::Tensor non_diag_mask_sdaa(torch::Tensor row, torch::Tensor col,
+                                 int64_t M, int64_t N, int64_t k) {
+  AT_ASSERTM(row.dim() == 1, "row must be 1D");
+  AT_ASSERTM(col.dim() == 1, "col must be 1D");
+
+  row = row.contiguous();
+  col = col.contiguous();
+
+  auto E = row.size(0);
+  auto num_diag = k < 0 ? std::min(M + k, N) : std::min(M, N - k);
+
+  auto mask = torch::zeros({E + num_diag}, row.options().dtype(torch::kBool));
+
+  if (E == 0)
+    return mask;
+
+  auto row_data = row.data_ptr<int64_t>();
+  auto col_data = col.data_ptr<int64_t>();
+  auto mask_data = mask.data_ptr<bool>();
+
+  non_diag_mask_kernel<<<0>>>(row_data, col_data, mask_data, N, k, num_diag, E);
+
+  return mask;
+}

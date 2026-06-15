@@ -23,6 +23,8 @@ SPARSE_API std::tuple<torch::Tensor, torch::Tensor> relabel(torch::Tensor col,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (col.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for relabel");
   } else {
     return relabel_cpu(col, idx);
   }
@@ -39,6 +41,8 @@ relabel_one_hop(torch::Tensor rowptr, torch::Tensor col,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for relabel_one_hop");
   } else {
     return relabel_one_hop_cpu(rowptr, col, optional_value, idx, bipartite);
   }

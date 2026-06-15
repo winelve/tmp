@@ -24,6 +24,8 @@ SPARSE_API torch::Tensor partition(torch::Tensor rowptr, torch::Tensor col,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for partition");
   } else {
     return partition_cpu(rowptr, col, optional_value, std::nullopt, num_parts,
                          recursive);
@@ -40,6 +42,8 @@ SPARSE_API torch::Tensor partition2(torch::Tensor rowptr, torch::Tensor col,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for partition2");
   } else {
     return partition_cpu(rowptr, col, optional_value, optional_node_weight,
                          num_parts, recursive);
@@ -57,6 +61,8 @@ SPARSE_API torch::Tensor mt_partition(torch::Tensor rowptr, torch::Tensor col,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for mt_partition");
   } else {
     return mt_partition_cpu(rowptr, col, optional_value, optional_node_weight,
                             num_parts, recursive, num_workers);

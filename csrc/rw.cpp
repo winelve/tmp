@@ -9,6 +9,10 @@
 #include "cuda/rw_cuda.h"
 #endif
 
+#ifdef WITH_SDAA
+#include "sdaa/rw_sdaa.h"
+#endif
+
 #ifdef _WIN32
 #ifdef WITH_PYTHON
 #ifdef WITH_CUDA
@@ -26,6 +30,12 @@ SPARSE_API torch::Tensor random_walk(torch::Tensor rowptr, torch::Tensor col,
     return random_walk_cuda(rowptr, col, start, walk_length);
 #else
     AT_ERROR("Not compiled with CUDA support");
+#endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+#ifdef WITH_SDAA
+    return random_walk_sdaa(rowptr, col, start, walk_length);
+#else
+    AT_ERROR("Not compiled with SDAA support");
 #endif
   } else {
     return random_walk_cpu(rowptr, col, start, walk_length);

@@ -1,0 +1,254 @@
+// SDAA SpMM (Sparse-Dense Matrix Multiplication) device kernel implementation.
+// Contains both forward and backward (value gradient) kernels.
+// Uses AT_DISPATCH macros for type dispatch (following teco-pyg-lib style).
+
+#include "spmm_sdaa.h"
+#include "atomics_sdaa.h"
+#include <torch/script.h>
+#include <torch_sdaa/sdaa_extension.h>
+#include <ATen/ATen.h>
+#include <cstdint>
+#include <limits>
+#include <map>
+
+enum SDAA_ReduceType { SDAA_SUM, SDAA_MEAN, SDAA_MUL, SDAA_DIV, SDAA_MIN, SDAA_MAX };
+
+static const std::map<std::string, SDAA_ReduceType> s_reduce_map = {
+    {"sum", SDAA_SUM}, {"mean", SDAA_MEAN}, {"mul", SDAA_MUL},
+    {"div", SDAA_DIV}, {"min", SDAA_MIN},   {"max", SDAA_MAX},
+};
+
+// ─── Identity / Update / Write helpers ─────────────────────────────────
+
+template <typename T>
+__device__ inline T spmm_identity(SDAA_ReduceType r) {
+  switch (r) {
+    case SDAA_MUL:
+    case SDAA_DIV: return (T)1;
+    case SDAA_MIN: return std::numeric_limits<T>::max();
+    case SDAA_MAX: return std::numeric_limits<T>::lowest();
+    default:       return (T)0;
+  }
+}
+
+template <typename T>
+__device__ inline void spmm_update(T *val, T new_val, int64_t *arg, int64_t new_arg,
+                                    SDAA_ReduceType r) {
+  switch (r) {
+    case SDAA_SUM:
+    case SDAA_MEAN: *val = *val + new_val; break;
+    case SDAA_MUL:  *val = *val * new_val; break;
+    case SDAA_DIV:  *val = *val / new_val; break;
+    case SDAA_MIN:
+      if (new_val < *val) { *val = new_val; if (arg) *arg = new_arg; }
+      break;
+    case SDAA_MAX:
+      if (new_val > *val) { *val = new_val; if (arg) *arg = new_arg; }
+      break;
+  }
+}
+
+template <typename T>
+__device__ inline void spmm_write(T *addr, T val, int64_t *arg_addr, int64_t arg,
+                                   int64_t count, SDAA_ReduceType r) {
+  switch (r) {
+    case SDAA_SUM:  *addr = val; break;
+    case SDAA_MUL:  *addr = val; break;
+    case SDAA_DIV:  *addr = val; break;
+    case SDAA_MEAN: *addr = val / (T)(count > 0 ? count : 1); break;
+    case SDAA_MIN:
+    case SDAA_MAX:
+      if (count > 0) { *addr = val; if (arg_addr) *arg_addr = arg; }
+      else           { *addr = (T)0; }
+      break;
+  }
+}
+
+// ─── SpMM Forward kernel ──────────────────────────────────────────────
+// Each SPE thread processes one (row, mat_col) pair.
+// Iterates over all non-zero columns in the sparse row.
+
+template <typename T, bool HAS_VALUE>
+__global__ void spmm_kernel(
+    const int64_t *rowptr, const int64_t *col,
+    const T *value, const T *mat, T *out, int64_t *arg_out,
+    int64_t B, int64_t M, int64_t N, int64_t K,
+    SDAA_ReduceType reduce) {
+  int tid = threadIdx, nt = threadDim;
+  int64_t total_rows = B * M;
+  int64_t total_work = total_rows * K;
+
+  for (int64_t gi = tid; gi < total_work; gi += nt) {
+    int64_t row = gi / K;
+    int64_t k = gi % K;
+    int64_t b = row / M;
+    int64_t m = row % M;
+
+    int64_t row_start = rowptr[m];
+    int64_t row_end = rowptr[m + 1];
+    int64_t count = row_end - row_start;
+
+    T val = spmm_identity<T>(reduce);
+    int64_t arg = 0;
+
+    for (int64_t e = row_start; e < row_end; e++) {
+      int64_t c = col[e];
+      T elem = mat[b * N * K + c * K + k];
+      if (HAS_VALUE)
+        elem = value[e] * elem;
+      spmm_update(&val, elem, &arg, e, reduce);
+    }
+
+    int64_t out_idx = b * M * K + m * K + k;
+    spmm_write(out + out_idx, val,
+               arg_out ? arg_out + out_idx : nullptr, arg, count, reduce);
+  }
+}
+
+// ─── SpMM Value Backward kernel ───────────────────────────────────────
+// Computes gradient w.r.t. sparse matrix values.
+
+template <typename T, bool IS_MEAN>
+__global__ void spmm_value_bw_kernel(
+    const int64_t *row, const int64_t *rowptr,
+    const int64_t *col, const T *mat, const T *grad,
+    T *out, int64_t B, int64_t M, int64_t N, int64_t E, int64_t K) {
+  int tid = threadIdx, nt = threadDim;
+
+  for (int64_t e = tid; e < E; e += nt) {
+    int64_t r = row[e];
+    int64_t c = col[e];
+    T val = (T)0;
+
+    for (int64_t b = 0; b < B; b++) {
+      for (int64_t k = 0; k < K; k++) {
+        val += mat[b * N * K + c * K + k] * grad[b * M * K + r * K + k];
+      }
+    }
+
+    if (IS_MEAN) {
+      int64_t row_start = rowptr[r];
+      int64_t row_end = rowptr[r + 1];
+      int64_t count = row_end - row_start;
+      val /= (T)(count > 0 ? count : 1);
+    }
+
+    out[e] = val;
+  }
+}
+
+// ─── Host dispatch: SpMM Forward ──────────────────────────────────────
+
+std::tuple<torch::Tensor, std::optional<torch::Tensor>>
+spmm_sdaa(torch::Tensor rowptr, torch::Tensor col,
+          std::optional<torch::Tensor> optional_value, torch::Tensor mat,
+          std::string reduce) {
+
+  auto it = s_reduce_map.find(reduce);
+  if (it == s_reduce_map.end()) AT_ERROR("Unknown reduce: ", reduce);
+  SDAA_ReduceType rtype = it->second;
+
+  AT_ASSERTM(rowptr.dim() == 1, "rowptr must be 1D");
+  AT_ASSERTM(col.dim() == 1, "col must be 1D");
+  if (optional_value.has_value()) {
+    AT_ASSERTM(optional_value.value().dim() == 1, "value must be 1D");
+    AT_ASSERTM(optional_value.value().size(0) == col.size(0),
+               "value and col size mismatch");
+  }
+  AT_ASSERTM(mat.dim() >= 2, "mat must be >= 2D");
+
+  rowptr = rowptr.contiguous();
+  col = col.contiguous();
+  mat = mat.contiguous();
+
+  auto sizes = mat.sizes().vec();
+  sizes[mat.dim() - 2] = rowptr.numel() - 1;
+  auto out = torch::empty(sizes, mat.options());
+
+  std::optional<torch::Tensor> arg_out = std::nullopt;
+  int64_t *arg_out_data = nullptr;
+  if (rtype == SDAA_MIN || rtype == SDAA_MAX) {
+    arg_out = torch::full_like(out, col.numel(), rowptr.options());
+    arg_out_data = arg_out.value().data_ptr<int64_t>();
+  }
+
+  auto M = rowptr.numel() - 1;
+  auto N = mat.size(-2);
+  auto K = mat.size(-1);
+  auto B = mat.numel() / (N * K);
+
+  if (mat.numel() == 0 || M == 0) {
+    return std::make_tuple(out, arg_out);
+  }
+
+  auto rowptr_data = rowptr.data_ptr<int64_t>();
+  auto col_data = col.data_ptr<int64_t>();
+
+  AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Int, at::ScalarType::Long,
+      mat.scalar_type(), "spmm_sdaa", [&] {
+    auto mat_data = mat.data_ptr<scalar_t>();
+    auto out_data = out.data_ptr<scalar_t>();
+
+    if (optional_value.has_value()) {
+      auto value_data = optional_value.value().data_ptr<scalar_t>();
+      spmm_kernel<scalar_t, true><<<0>>>(
+          rowptr_data, col_data, value_data, mat_data, out_data, arg_out_data,
+          B, M, N, K, rtype);
+    } else {
+      spmm_kernel<scalar_t, false><<<0>>>(
+          rowptr_data, col_data, nullptr, mat_data, out_data, arg_out_data,
+          B, M, N, K, rtype);
+    }
+  });
+
+  return std::make_tuple(out, arg_out);
+}
+
+// ─── Host dispatch: SpMM Value Backward ───────────────────────────────
+
+torch::Tensor spmm_value_bw_sdaa(torch::Tensor row, torch::Tensor rowptr,
+                                 torch::Tensor col, torch::Tensor mat,
+                                 torch::Tensor grad, std::string reduce) {
+
+  row = row.contiguous();
+  rowptr = rowptr.contiguous();
+  col = col.contiguous();
+  mat = mat.contiguous();
+  grad = grad.contiguous();
+
+  auto M = grad.size(-2);
+  auto N = mat.size(-2);
+  auto E = row.numel();
+  auto K = mat.size(-1);
+  auto B = mat.numel() / (N * K);
+
+  auto out = torch::zeros({E}, grad.options());
+
+  if (E == 0)
+    return out;
+
+  auto row_data = row.data_ptr<int64_t>();
+  auto rowptr_data = rowptr.data_ptr<int64_t>();
+  auto col_data = col.data_ptr<int64_t>();
+
+  bool is_mean = (reduce == "mean");
+
+  AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Int, at::ScalarType::Long,
+      mat.scalar_type(), "spmm_value_bw_sdaa", [&] {
+    auto mat_data = mat.data_ptr<scalar_t>();
+    auto grad_data = grad.data_ptr<scalar_t>();
+    auto out_data = out.data_ptr<scalar_t>();
+
+    if (is_mean) {
+      spmm_value_bw_kernel<scalar_t, true><<<0>>>(
+          row_data, rowptr_data, col_data, mat_data, grad_data, out_data,
+          B, M, N, E, K);
+    } else {
+      spmm_value_bw_kernel<scalar_t, false><<<0>>>(
+          row_data, rowptr_data, col_data, mat_data, grad_data, out_data,
+          B, M, N, E, K);
+    }
+  });
+
+  return out;
+}

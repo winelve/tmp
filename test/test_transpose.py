@@ -4,11 +4,12 @@ import pytest
 import torch
 
 from torch_sparse import transpose
-from torch_sparse.testing import devices, dtypes, tensor
+from torch_sparse.testing import devices, dtypes, skip_if_unsupported, tensor
 
 
 @pytest.mark.parametrize('dtype,device', product(dtypes, devices))
 def test_transpose_matrix(dtype, device):
+    skip_if_unsupported(dtype, device)
     row = torch.tensor([1, 0, 1, 2], device=device)
     col = torch.tensor([0, 1, 1, 0], device=device)
     index = torch.stack([row, col], dim=0)
@@ -21,6 +22,7 @@ def test_transpose_matrix(dtype, device):
 
 @pytest.mark.parametrize('dtype,device', product(dtypes, devices))
 def test_transpose(dtype, device):
+    skip_if_unsupported(dtype, device)
     row = torch.tensor([1, 0, 1, 0, 2, 1], device=device)
     col = torch.tensor([0, 1, 1, 1, 0, 0], device=device)
     index = torch.stack([row, col], dim=0)

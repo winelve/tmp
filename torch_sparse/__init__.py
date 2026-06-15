@@ -9,11 +9,13 @@ for library in [
         '_version', '_convert', '_diag', '_spmm', '_metis', '_rw', '_saint',
         '_sample', '_ego_sample', '_hgt_sample', '_neighbor_sample', '_relabel'
 ]:
+    sdaa_spec = importlib.machinery.PathFinder().find_spec(
+        f'{library}_sdaa', [osp.dirname(__file__)])
     cuda_spec = importlib.machinery.PathFinder().find_spec(
         f'{library}_cuda', [osp.dirname(__file__)])
     cpu_spec = importlib.machinery.PathFinder().find_spec(
         f'{library}_cpu', [osp.dirname(__file__)])
-    spec = cuda_spec or cpu_spec
+    spec = sdaa_spec or cuda_spec or cpu_spec
     if spec is not None:
         torch.ops.load_library(spec.origin)
     else:  # pragma: no cover
@@ -21,6 +23,7 @@ for library in [
                           f"{osp.dirname(__file__)}")
 
 cuda_version = torch.ops.torch_sparse.cuda_version()
+sdaa_version = torch.ops.torch_sparse.sdaa_version()
 if torch.version.cuda is not None and cuda_version != -1:  # pragma: no cover
     if cuda_version < 10000:
         major, minor = int(str(cuda_version)[0]), int(str(cuda_version)[2])

@@ -24,6 +24,8 @@ subgraph(torch::Tensor idx, torch::Tensor rowptr, torch::Tensor row,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (idx.device().type() == c10::DeviceType::PrivateUse1) {
+    AT_ERROR("No SDAA version supported for saint_subgraph");
   } else {
     return subgraph_cpu(idx, rowptr, row, col);
   }

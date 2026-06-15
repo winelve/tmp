@@ -1,0 +1,3 @@
+// SDAA version stub - no device kernel needed for version info.
+// This file exists to satisfy the SDAA build extension requirement
+// that each SDAA extension has at least one .scpp source.

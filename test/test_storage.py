@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from torch_sparse.storage import SparseStorage
-from torch_sparse.testing import devices, dtypes, tensor
+from torch_sparse.testing import devices, dtypes, skip_if_unsupported, tensor
 
 
 @pytest.mark.parametrize('device', devices)
@@ -124,6 +124,7 @@ def test_utility(dtype, device):
 
 @pytest.mark.parametrize('dtype,device', product(dtypes, devices))
 def test_coalesce(dtype, device):
+    skip_if_unsupported(dtype, device)
     row, col = tensor([[0, 0, 0, 1, 1], [0, 1, 1, 0, 1]], torch.long, device)
     value = tensor([1, 1, 1, 3, 4], dtype, device)
     storage = SparseStorage(row=row, col=col, value=value)

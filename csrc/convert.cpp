@@ -9,6 +9,10 @@
 #include "cuda/convert_cuda.h"
 #endif
 
+#ifdef WITH_SDAA
+#include "sdaa/convert_sdaa.h"
+#endif
+
 #ifdef _WIN32
 #ifdef WITH_PYTHON
 #ifdef WITH_CUDA
@@ -26,6 +30,12 @@ SPARSE_API torch::Tensor ind2ptr(torch::Tensor ind, int64_t M) {
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (ind.device().type() == c10::DeviceType::PrivateUse1) {
+#ifdef WITH_SDAA
+    return ind2ptr_sdaa(ind, M);
+#else
+    AT_ERROR("Not compiled with SDAA support");
+#endif
   } else {
     return ind2ptr_cpu(ind, M);
   }
@@ -37,6 +47,12 @@ SPARSE_API torch::Tensor ptr2ind(torch::Tensor ptr, int64_t E) {
     return ptr2ind_cuda(ptr, E);
 #else
     AT_ERROR("Not compiled with CUDA support");
+#endif
+  } else if (ptr.device().type() == c10::DeviceType::PrivateUse1) {
+#ifdef WITH_SDAA
+    return ptr2ind_sdaa(ptr, E);
+#else
+    AT_ERROR("Not compiled with SDAA support");
 #endif
   } else {
     return ptr2ind_cpu(ptr, E);

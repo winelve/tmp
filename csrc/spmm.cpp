@@ -9,6 +9,10 @@
 #include "cuda/spmm_cuda.h"
 #endif
 
+#ifdef WITH_SDAA
+#include "sdaa/spmm_sdaa.h"
+#endif
+
 #ifdef _WIN32
 #ifdef WITH_PYTHON
 #ifdef WITH_CUDA
@@ -29,6 +33,12 @@ spmm_fw(torch::Tensor rowptr, torch::Tensor col,
 #else
     AT_ERROR("Not compiled with CUDA support");
 #endif
+  } else if (rowptr.device().type() == c10::DeviceType::PrivateUse1) {
+#ifdef WITH_SDAA
+    return spmm_sdaa(rowptr, col, optional_value, mat, reduce);
+#else
+    AT_ERROR("Not compiled with SDAA support");
+#endif
   } else {
     return spmm_cpu(rowptr, col, optional_value, mat, reduce);
   }
@@ -42,6 +52,12 @@ torch::Tensor spmm_value_bw(torch::Tensor row, torch::Tensor rowptr,
     return spmm_value_bw_cuda(row, rowptr, col, mat, grad, reduce);
 #else
     AT_ERROR("Not compiled with CUDA support");
+#endif
+  } else if (row.device().type() == c10::DeviceType::PrivateUse1) {
+#ifdef WITH_SDAA
+    return spmm_value_bw_sdaa(row, rowptr, col, mat, grad, reduce);
+#else
+    AT_ERROR("Not compiled with SDAA support");
 #endif
   } else {
     return spmm_value_bw_cpu(row, rowptr, col, mat, grad, reduce);

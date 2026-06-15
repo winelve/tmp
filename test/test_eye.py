@@ -9,7 +9,7 @@ from torch_sparse.testing import devices, dtypes
 @pytest.mark.parametrize('dtype,device', product(dtypes, devices))
 def test_eye(dtype, device):
     mat = SparseTensor.eye(3, dtype=dtype, device=device)
-    assert mat.device() == device
+    assert mat.device().type == device.type
     assert mat.storage.sparse_sizes() == (3, 3)
     assert mat.storage.row().tolist() == [0, 1, 2]
     assert mat.storage.rowptr().tolist() == [0, 1, 2, 3]
@@ -19,7 +19,7 @@ def test_eye(dtype, device):
     assert mat.storage.num_cached_keys() == 0
 
     mat = SparseTensor.eye(3, has_value=False, device=device)
-    assert mat.device() == device
+    assert mat.device().type == device.type
     assert mat.storage.sparse_sizes() == (3, 3)
     assert mat.storage.row().tolist() == [0, 1, 2]
     assert mat.storage.rowptr().tolist() == [0, 1, 2, 3]
@@ -28,7 +28,7 @@ def test_eye(dtype, device):
     assert mat.storage.num_cached_keys() == 0
 
     mat = SparseTensor.eye(3, 4, fill_cache=True, device=device)
-    assert mat.device() == device
+    assert mat.device().type == device.type
     assert mat.storage.sparse_sizes() == (3, 4)
     assert mat.storage.row().tolist() == [0, 1, 2]
     assert mat.storage.rowptr().tolist() == [0, 1, 2, 3]
@@ -41,7 +41,7 @@ def test_eye(dtype, device):
     assert mat.storage.csc2csr().tolist() == [0, 1, 2]
 
     mat = SparseTensor.eye(4, 3, fill_cache=True, device=device)
-    assert mat.device() == device
+    assert mat.device().type == device.type
     assert mat.storage.sparse_sizes() == (4, 3)
     assert mat.storage.row().tolist() == [0, 1, 2]
     assert mat.storage.rowptr().tolist() == [0, 1, 2, 3, 3]

@@ -9,6 +9,10 @@
 #include "cuda/diag_cuda.h"
 #endif
 
+#ifdef WITH_SDAA
+#include "sdaa/diag_sdaa.h"
+#endif
+
 #ifdef _WIN32
 #ifdef WITH_PYTHON
 #ifdef WITH_CUDA
@@ -26,6 +30,12 @@ SPARSE_API torch::Tensor non_diag_mask(torch::Tensor row, torch::Tensor col, int
     return non_diag_mask_cuda(row, col, M, N, k);
 #else
     AT_ERROR("Not compiled with CUDA support");
+#endif
+  } else if (row.device().type() == c10::DeviceType::PrivateUse1) {
+#ifdef WITH_SDAA
+    return non_diag_mask_sdaa(row, col, M, N, k);
+#else
+    AT_ERROR("Not compiled with SDAA support");
 #endif
   } else {
     return non_diag_mask_cpu(row, col, M, N, k);

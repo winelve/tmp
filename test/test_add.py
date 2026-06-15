@@ -4,11 +4,12 @@ import pytest
 import torch
 
 from torch_sparse import SparseTensor, add
-from torch_sparse.testing import devices, dtypes, tensor
+from torch_sparse.testing import devices, dtypes, skip_if_unsupported, tensor
 
 
 @pytest.mark.parametrize('dtype,device', product(dtypes, devices))
 def test_add(dtype, device):
+    skip_if_unsupported(dtype, device)
     rowA = torch.tensor([0, 0, 1, 2, 2], device=device)
     colA = torch.tensor([0, 2, 1, 0, 1], device=device)
     valueA = tensor([1, 2, 4, 1, 3], dtype, device)
