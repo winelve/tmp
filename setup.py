@@ -138,18 +138,26 @@ def get_extensions():
                               ('USE_EXPERIMENTAL_SDAA_API', None)]
             sdaa_flags = os.getenv('SDAA_FLAGS', '')
             sdaa_flags = [] if sdaa_flags == '' else sdaa_flags.split(' ')
-            sdaa_flags += ['-O3']
-            extra_compile_args['cxx'] += sdaa_flags
+            # Flags for both host (cxx) and device (tecocc) compilation.
+            # tecocc path (use_ninja=False) only reads extra_compile_args['tecocc'].
+            sdaa_common = sdaa_flags + [
+                '-O3',
+                # Force lock-free atomics for long (needed by tecocc / libc++).
+                '-U__GCC_ATOMIC_LONG_LOCK_FREE',
+                '-D__GCC_ATOMIC_LONG_LOCK_FREE=2',
+            ]
             # Add SDAA include dirs
             SDAA_HOME = os.getenv('SDAA_HOME', '/opt/tecoai')
-            extra_compile_args['cxx'] += [
+            sdaa_includes = [
                 f'-I{osp.join(SDAA_HOME, "include")}',
             ]
             if torch_sdaa is not None:
                 TORCH_SDAA_HOME = osp.dirname(osp.dirname(torch_sdaa.__file__))
-                extra_compile_args['cxx'] += [
+                sdaa_includes += [
                     f'-I{osp.join(TORCH_SDAA_HOME, "torch_sdaa", "include")}',
                 ]
+            extra_compile_args['cxx'] += sdaa_common + sdaa_includes
+            extra_compile_args['tecocc'] = list(sdaa_common) + sdaa_includes
             # Convert extra_link_args to dict format for TecoExtension
             extra_link_args = {
                 'cxx': (extra_link_args if isinstance(extra_link_args, list)
@@ -215,9 +223,13 @@ include_package_data = True
 if torch.cuda.is_available() and torch.version.hip:
     include_package_data = False
 
+# Distinguish SDAA wheels from CPU/CUDA wheels via a PEP 440 local version
+# segment, e.g. `0.6.18+sdaa` -> `torch_sparse-0.6.18+sdaa-...-linux_x86_64.whl`.
+pkg_version = f'{__version__}+sdaa' if 'sdaa' in suffices else __version__
+
 setup(
     name='torch_sparse',
-    version=__version__,
+    version=pkg_version,
     description=('PyTorch Extension Library of Optimized Autograd Sparse '
                  'Matrix Operations'),
     author='Matthias Fey',
