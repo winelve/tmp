@@ -1,0 +1,15 @@
+{
+    "ubuntu": {
+        "sdaadriver": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/SDAADriver/2.3.0/beta/2.3.0b0/102/sdaadriver_2.3.0b0-1.ubuntu2204_amd64.deb",
+        "sdaart": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/SDAARuntime/3.1.0/beta/3.1.0b0/140/sdaart_3.1.0b0-1.ubuntu2204_amd64.deb",
+        "tecocc": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/TecoCC/3.1.0/beta/3.1.0b0/102/tecodevtools_3.1.0b0-1.ubuntu2204_amd64.deb",
+	"sdpti": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/SDPTI/1.7.0/beta/1.7.0b0/29/sdpti_1.7.0b0-1.ubuntu2204_amd64.deb",
+        "tccl": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/TCCL/3.1.0/alpha/3.1.0a0/64/tccl_3.1.0a0-1.ubuntu2204_amd64.deb",
+        "tecoblas": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/TecoBLAS/3.1.1/beta/3.1.1b0/110/tecoblas_3.1.1b0-1.ubuntu2204_amd64.deb",
+        "tecodnn": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/TecoDNN/3.1.1/beta/3.1.1b0/108/tecodnn_3.1.1b0-1.ubuntu2204_amd64.deb",
+        "tecocustom": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/TecoCUSTOM/3.1.1/beta/3.1.1b0/67/tecocustom_3.1.1b0-1.ubuntu2204_amd64.deb",
+        "tecorand": "http://jfrog.tecorigin.net/artifactory/tecobs-deb-ubuntu/2204-gcc11/tecorand/artifacts/2.0.1/beta/2.0.1b0/2/tecorand_2.0.1b0-1.ubuntu2204_amd64.deb",
+        "tcpx": "http://jfrog.tecorigin.net/artifactory/Teco-deb/pool/Ubuntu/22.04/Intel_AMD_x86_64/TCPX/0.3.0/release/0.3.0/43/tcpx_0.3.0-1.ubuntu2204_amd64.deb"
+    },
+    "torch_sdaa": "http://jfrog.tecorigin.net:80/artifactory/Teco-py310-whl/Ubuntu/22.04/Intel_AMD_x86_64/TecoPyTorch/2.7/3.1.0/release/3.1.0/16/torch_sdaa-3.1.0-cp310-cp310-linux_x86_64.whl"
+}

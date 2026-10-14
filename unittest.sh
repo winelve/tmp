@@ -25,37 +25,36 @@ echo ""
 
 # Run tests that support SDAA backend
 # Currently supported tests:
-# - test/ops/test_add.py
-# - test/ops/test_cat.py
-# - test/ops/test_coalesce.py
-# - test/ops/test_convert.py
-# - test/ops/test_diag.py
-# - test/ops/test_ego_sample.py
-# - test/ops/test_eye.py
-# - test/ops/test_matmul.py
-# - test/ops/test_metis.py
-# - test/ops/test_mul.py
-# - test/ops/test_neighbor_sample.py
-# - test/ops/test_overload.py
-# - test/ops/test_permute.py
-# - test/ops/test_saint.py
-# - test/ops/test_sample.py
-# - test/ops/test_spmm.py
-# - test/ops/test_spspmm.py
-# - test/ops/test_storage.py
-# - test/ops/test_tensor.py
-# - test/ops/test_transpose.py
+# - test/test_add.py
+# - test/test_cat.py
+# - test/test_coalesce.py
+# - test/test_convert.py
+# - test/test_diag.py
+# - test/test_ego_sample.py
+# - test/test_eye.py
+# - test/test_matmul.py
+# - test/test_metis.py
+# - test/test_mul.py
+# - test/test_neighbor_sample.py
+# - test/test_overload.py
+# - test/test_permute.py
+# - test/test_saint.py
+# - test/test_sample.py
+# - test/test_spmm.py
+# - test/test_spspmm.py
+# - test/test_storage.py
+# - test/test_tensor.py
+# - test/test_transpose.py
 
-pytest test/ops/test_add.py test/ops/test_cat.py test/ops/test_coalesce.py \
-       test/ops/test_convert.py test/ops/test_diag.py test/ops/test_ego_sample.py \
-       test/ops/test_eye.py test/ops/test_matmul.py test/ops/test_metis.py \
-       test/ops/test_mul.py test/ops/test_neighbor_sample.py test/ops/test_overload.py \
-       test/ops/test_permute.py test/ops/test_saint.py test/ops/test_sample.py \
-       test/ops/test_spmm.py test/ops/test_spspmm.py test/ops/test_storage.py \
-       test/ops/test_tensor.py test/ops/test_transpose.py -v "$@"
+pytest test/test_add.py test/test_cat.py test/test_coalesce.py \
+       test/test_convert.py test/test_diag.py test/test_ego_sample.py \
+       test/test_eye.py test/test_matmul.py test/test_metis.py \
+       test/test_mul.py test/test_neighbor_sample.py test/test_overload.py \
+       test/test_permute.py test/test_saint.py test/test_sample.py \
+       test/test_spmm.py test/test_spspmm.py test/test_storage.py \
+       test/test_tensor.py test/test_transpose.py -v "$@"
 
 echo ""
 echo "======================================"
 echo "SDAA unit tests completed"
 echo "======================================"
-
